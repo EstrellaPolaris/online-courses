@@ -1,0 +1,62 @@
+
+services:
+  nextjs:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env.local
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - postgres
+      # - opa # УДАЛЕНО: Больше не нужен
+    networks:
+      - lms_network
+
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    env_file:
+      - ./.env.local
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - lms_network
+
+  # opa: # УДАЛЕНО: Больше не нужен
+  #   image: openpolicyagent/opa:latest-debug
+  #   platform: linux/amd64
+  #   command: run -s -a :8181 /policies/access.rego
+  #   volumes:
+  #     - ./opa/policies:/policies:ro
+  #   ports:
+  #     - "8181:8181"
+  #   networks:
+  #     - lms_network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs/server.crt:/etc/nginx/certs/server.crt:ro
+      - ./certs/server.key:/etc/nginx/certs/server.key:ro
+    depends_on:
+      - nextjs
+    networks:
+      - lms_network
+
+volumes:
+  postgres_data:
+
+networks:
+  lms_network:
+    driver: bridge

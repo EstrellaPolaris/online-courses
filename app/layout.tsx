@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+// Корневой макет: общая структура HTML, JWT-проверка, контексты (глобальные)
+/*import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -27,6 +28,56 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {children}
+      </body>
+    </html>
+  );
+}*/
+
+
+// online-courses/app/layout.tsx
+import './globals.css'; // Assuming global styles are here
+import Link from 'next/link';
+
+// Root layout: JWT-проверка, контексты (placeholder)
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  // В реальном приложении здесь будет логика проверки JWT и инициализации контекстов
+  // Например, Context.Provider для аутентификации, пользовательских данных и т.д.
+  // const user = await checkAuthToken(); // Пример асинхронной проверки JWT
+
+  return (
+    <html lang="ru">
+      <head>
+        <title>Платформа обучения</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        
+        {/* Lucide React icons (for development, in production you'd import specific icons) */}
+        
+      </head>
+      <body className="min-h-screen bg-gray-100 font-sans antialiased">
+        {/* Public Navigation (can be part of a separate Header component) */}
+        <nav className="bg-gradient-to-r from-blue-700 to-blue-900 p-4 text-white shadow-lg">
+          <div className="container mx-auto flex justify-between items-center">
+            <Link href="/" className="text-3xl font-bold hover:text-blue-200 transition-colors duration-300">
+              LMS Платформа
+            </Link>
+            <div className="space-x-6">
+              <Link href="/pricing" className="text-lg hover:text-blue-200 transition-colors duration-300">
+                Тарифы
+              </Link>
+              <Link href="/login" className="text-lg hover:text-blue-200 transition-colors duration-300">
+                Войти
+              </Link>
+              <Link href="/register" className="text-lg bg-white text-blue-700 px-5 py-2 rounded-full hover:bg-blue-100 transition-colors duration-300 shadow-md">
+                Регистрация
+              </Link>
+            </div>
+          </div>
+        </nav>
         {children}
       </body>
     </html>

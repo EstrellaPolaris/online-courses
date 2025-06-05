@@ -1,0 +1,79 @@
+# Добавление OU (Organizational Unit) для пользователей
+dn: ou=users,dc=lms,dc=local
+objectClass: organizationalUnit
+ou: users
+
+# Добавление OU для групп
+dn: ou=groups,dc=lms,dc=local
+objectClass: organizationalUnit
+ou: groups
+
+# =======================================================
+# Тестовый пользователь: student (user123)
+# Пароль: password123
+# =======================================================
+dn: uid=user123,ou=users,dc=lms,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+uid: user123
+cn: Student User
+sn: User
+mail: user123@lms.local
+userPassword: {SSHA}2OFOw3YqHmjQ+BYmVpNJKlCfSufIOL26
+
+# =======================================================
+# Тестовый пользователь: teacher (teacher456)
+# Пароль: password123
+# =======================================================
+dn: uid=teacher456,ou=users,dc=lms,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+uid: teacher456
+cn: Teacher User
+sn: User
+mail: teacher456@lms.local
+userPassword: {SSHA}2OFOw3YqHmjQ+BYmVpNJKlCfSufIOL26
+
+# =======================================================
+# Тестовый пользователь: admin (admin789)
+# Пароль: password123
+# =======================================================
+dn: uid=admin789,ou=users,dc=lms,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+uid: admin789
+cn: Admin User
+sn: User
+mail: admin789@lms.local
+userPassword: {SSHA}2OFOw3YqHmjQ+BYmVpNJKlCfSufIOL26
+
+# =======================================================
+# Группы (для ролей)
+# =======================================================
+
+# Группа "students"
+dn: cn=students,ou=groups,dc=lms,dc=local
+objectClass: groupOfNames
+objectClass: top
+cn: students
+member: uid=user123,ou=users,dc=lms,dc=local
+
+# Группа "teachers"
+dn: cn=teachers,ou=groups,dc=lms,dc=local
+objectClass: groupOfNames
+objectClass: top
+cn: teachers
+member: uid=teacher456,ou=users,dc=lms,dc=local
+
+# Группа "admins"
+dn: cn=admins,ou=groups,dc=lms,dc=local
+objectClass: groupOfNames
+objectClass: top
+cn: admins
+member: uid=admin789,ou=users,dc=lms,dc=local
