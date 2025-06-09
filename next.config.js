@@ -1,27 +1,34 @@
+// online-courses/next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   i18n: {
-    locales: ['ru', 'en', 'es'],
-    defaultLocale: 'ru',
+    locales: ['ru', 'en', 'es'], // Общие локали, которые поддерживает ваше приложение
+    defaultLocale: 'ru',       // Основная локаль для всего приложения (будет использоваться, если домен не определен явно)
     domains: [
+      // Основной домен для продакшен-среды
+      // Он будет служить точкой входа для русского языка (по умолчанию)
+      // и также позволит доступ к другим языкам через пути (например, lms.ns-tech.es/en)
       {
         domain: 'lms.ns-tech.es',
-        defaultLocale: 'ru',
-        locales: ['ru', 'en', 'es'],
+        defaultLocale: 'ru',               // ЭТОТ домен является дефолтным для русского языка
+        locales: ['ru', 'en', 'es'],       // И он может обслуживать все локали
       },
-      {
-        domain: 'ru.lms.ns-tech.es',
-        locales: ['ru'], // <-- убрали defaultLocale
-      },
+      // ru.lms.ns-tech.es УДАЛЕН, чтобы избежать конфликта "defaultLocale ru"
+      // Так как lms.ns-tech.es уже является основным доменом для русского языка.
+      // Если вам необходим ru.lms.ns-tech.es, его можно настроить как редирект
+      // в GoDaddy на lms.ns-tech.es
+
+      // Отдельный домен для английской версии
       {
         domain: 'en.lms.ns-tech.es',
-        defaultLocale: 'en',
-        locales: ['en'],
+        defaultLocale: 'en',               // Этот домен является дефолтным для английского языка
+        locales: ['en'],                   // И он обслуживает только английский язык
       },
+      // Отдельный домен для испанской версии
       {
         domain: 'es.lms.ns-tech.es',
-        defaultLocale: 'es',
-        locales: ['es'],
+        defaultLocale: 'es',               // Этот домен является дефолтным для испанского языка
+        locales: ['es'],                   // И он обслуживает только испанский язык
       },
     ],
     localeDetection: false,
