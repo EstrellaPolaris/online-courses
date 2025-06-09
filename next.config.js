@@ -11,7 +11,7 @@ const nextConfig = {
       {
         domain: 'lms.ns-tech.es',
         defaultLocale: 'ru',               // ЭТОТ домен является дефолтным для русского языка
-        locales: ['ru', 'en', 'es'],       // И он может обслуживать все локали
+        locales: ['ru'],       // И он может обслуживать все локали
       },
       // ru.lms.ns-tech.es УДАЛЕН, чтобы избежать конфликта "defaultLocale ru"
       // Так как lms.ns-tech.es уже является основным доменом для русского языка.
