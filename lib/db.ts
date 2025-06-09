@@ -18,14 +18,84 @@ import {
   MagicLinkToken,
 } from '@/types';
 
-export const pool = new Pool({
-  user: process.env.POSTGRES_USER,
-  host: process.env.DB_HOST,
-  database: process.env.POSTGRES_DB,
-  password: process.env.POSTGRES_PASSWORD,
-  port: parseInt(process.env.DB_PORT || '5432'),
+// =========================================================
+// ИСПРАВЛЕНИЕ ОШИБКИ TypeScript 'Namespace 'NodeJS' has no exported member 'Global''
+// Мы объявляем пользовательский интерфейс для глобального объекта,
+// НЕ РАСШИРЯЯ NodeJS.Global. Это решает проблему, если типы Node.js
+// не полностью доступны или не настроены должным образом в tsconfig.
+// Затем мы приводим глобальный объект к этому пользовательскому типу.
+// =========================================================
+interface CustomGlobal {
+  pgPool?: Pool;
+  // Если у вас есть другие глобальные переменные, определенные в вашем приложении,
+  // которые вы используете как `global.someOtherVar`, вы можете добавить их сюда:
+  // someOtherVar?: any;
+}
+
+// Приводим глобальный объект к нашему пользовательскому типу.
+// Это делает доступ к globalWithPgPool.pgPool типобезопасным.
+const globalWithPgPool = global as CustomGlobal;
+
+// =========================================================
+// Инициализация пула подключений к базе данных.
+// Использует DATABASE_URL (для Neon/Vercel) или отдельные переменные
+// окружения (для локальной разработки).
+// Глобальный объект (globalWithPgPool.pgPool) используется для предотвращения
+// создания множественных подключений при горячей перезагрузке Next.js.
+// =========================================================
+
+// Инициализируем пул только один раз, чтобы избежать проблем с горячей перезагрузкой
+// в Next.js (или других фреймворках с HMR).
+if (!globalWithPgPool.pgPool) {
+  if (process.env.DATABASE_URL) {
+    // Предпочтительный способ подключения к Neon/PostgreSQL через Vercel.
+    globalWithPgPool.pgPool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false // Часто необходимо для облачных БД, если нет CA сертификата
+      }
+    });
+    console.log("DB: Connected using DATABASE_URL");
+  } else {
+    // Fallback для локальной разработки, если DATABASE_URL не установлен.
+    // Например, для локального Docker-контейнера PostgreSQL.
+    globalWithPgPool.pgPool = new Pool({
+      user: process.env.POSTGRES_USER,
+      host: process.env.DB_HOST,
+      database: process.env.POSTGRES_DB,
+      password: process.env.POSTGRES_PASSWORD,
+      port: parseInt(process.env.DB_PORT || '5432'),
+      ssl: {
+        // Опционально: может понадобиться, если локальный Postgres использует
+        // самоподписанные сертификаты. В противном случае можно удалить.
+        rejectUnauthorized: false
+      }
+    });
+    console.log("DB: Connected using individual environment variables (fallback)");
+  }
+}
+
+// Исправление: Используем 'const' вместо 'let', так как 'pool'
+// не переназначается после инициализации. Используем оператор
+// non-null assertion (!) так как TypeScript знает, что globalWithPgPool.pgPool
+// будет инициализирован к этому моменту.
+export const pool: Pool = globalWithPgPool.pgPool!;
+
+// Обработка ошибок пула подключений:
+// Отлавливает критические ошибки, которые могут возникнуть с клиентом
+// в режиме ожидания (idle client).
+pool.on('error', (err) => {
+  console.error('DB: Unexpected error on idle client', err);
+  // В продакшене здесь может быть отправка уведомления или более мягкая обработка,
+  // чтобы предотвратить крах приложения, но для критических ошибок БД
+  // завершение процесса может быть уместным.
+  process.exit(-1);
 });
 
+
+// =========================================================
+// Объект 'db' со всеми функциями для взаимодействия с БД
+// =========================================================
 export const db = {
   // --- USERS ---
   getUserById: async (id: string): Promise<User | null> => {
@@ -199,7 +269,9 @@ export const db = {
 
       if (!course) return null;
 
-      const chapters: Chapter[] = []; // Заглушка, если главы не хранятся в основной таблице
+      // Примечание: Если главы (chapters) хранятся в отдельной таблице,
+      // здесь потребуется дополнительный запрос для их получения.
+      const chapters: Chapter[] = [];
 
       return {
         id: course.id,
@@ -215,7 +287,7 @@ export const db = {
         updatedAt: new Date(course.updated_at),
         chapters: chapters,
         studentsEnrolled: course.students_enrolled || 0,
-        students: course.students_enrolled || 0,
+        students: course.students_enrolled || 0, // Дублирование, но оставлено по вашему исходному коду
         isArchived: course.is_archived || false,
         rating: course.rating || undefined,
         reviewsCount: course.reviews_count || undefined,
@@ -292,7 +364,7 @@ export const db = {
           id,
           courseData.title,
           courseData.description,
-          courseData.imageUrl || null,
+          courseData.imageUrl || null, // Если image_url не предоставлен, используем null
           courseData.price,
           courseData.currency,
           courseData.instructorId,
@@ -334,7 +406,7 @@ export const db = {
     const client = await pool.connect();
     try {
       const id = uuidv4();
-      const token = uuidv4();
+      const token = uuidv4(); // Генерируем токен здесь
       const res = await client.query(
         `INSERT INTO access_tokens (id, token, user_id, entity_type, entity_id, access_details, status, yookassa_payment_id, generated_at, expires_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, $9) RETURNING *`,
@@ -546,9 +618,9 @@ export const db = {
         id: newMagicToken.id,
         token: newMagicToken.token,
         userId: newMagicToken.user_id,
-        expiresAt: new Date(newMagicToken.expires_at), // ИЗМЕНЕНО: Убрана проверка на undefined
+        expiresAt: new Date(newMagicToken.expires_at),
         usedAt: newMagicToken.used_at ? new Date(newMagicToken.used_at) : undefined,
-        createdAt: new Date(newMagicToken.created_at), // ИЗМЕНЕНО: Убрана проверка на undefined
+        createdAt: new Date(newMagicToken.created_at),
       };
     } finally {
       client.release();
@@ -586,7 +658,7 @@ export const db = {
   // --- Invite Code methods (Placeholder for now) ---
   saveInviteCode: async (email: string, role: UserRole, inviteCode: string, expiresAt: Date) => {
     console.log(`DB: Saving invite code ${inviteCode} for ${email} with role ${role}, expires ${expiresAt.toISOString()}`);
-    return Promise.resolve();
+    return Promise.resolve(); // Это заглушка, реальная логика должна быть реализована
   },
 
   // --- User Role Update (Placeholder for now) ---
@@ -606,24 +678,35 @@ export const db = {
     }
   },
 
-  // Функция для инициализации тестовых данных (седирования)
+  // =========================================================
+  // Функция для инициализации тестовых данных (седирования).
+  // Теперь она генерирует UUIDы один раз и использует их последовательно
+  // для всех связанных вставок, а также корректно выполняет INSERT для курсов.
+  // =========================================================
   seed: async () => {
     console.log('Seeding initial data...');
     const client = await pool.connect();
     try {
-      // Очистка данных (осторожно!)
+      // Очистка данных (осторожно! В реальном приложении это может быть опасно)
       await client.query('DELETE FROM user_purchased_courses');
       await client.query('DELETE FROM access_tokens');
       await client.query('DELETE FROM courses');
       await client.query('DELETE FROM magic_link_tokens');
       await client.query('DELETE FROM users');
+      await client.query('DELETE FROM payments');
+      await client.query('DELETE FROM subscriptions');
       console.log('Existing data cleared.');
 
-      // Вставка тестовых пользователей
+      // Генерация UUID для тестовых данных
       const studentId = uuidv4();
       const teacherId = uuidv4();
       const adminId = uuidv4();
 
+      const courseAiId = uuidv4();
+      const courseWebDevId = uuidv4();
+      const courseExclusiveId = uuidv4();
+
+      // Вставка тестовых пользователей
       await client.query(
         `INSERT INTO users (id, username, email, role, platform_access_tier, student_slots_available, email_verified, created_at, updated_at) VALUES
          ($1, 'user123', 'student@example.com', 'student', 'free', 0, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
@@ -633,18 +716,33 @@ export const db = {
       );
       console.log('Test users seeded.');
 
-      // Вставка тестовых курсов
-      const courseAiId = uuidv4();
-      const courseWebDevId = uuidv4();
-      const courseExclusiveId = uuidv4();
+      // Вставка тестовых курсов (выполняется отдельно для каждого курса)
+      const coursesToInsert = [
+        { id: courseAiId, title: 'Основы ИИ', description: 'Курс по основам искусственного интеллекта.', instructorId: teacherId, price: 99.99, currency: 'RUB', category: 'programming' as CourseCategory, isPublished: true, studentsEnrolled: 10, isArchived: false },
+        { id: courseWebDevId, title: 'Fullstack Web-разработка', description: 'Полный курс по веб-разработке.', instructorId: teacherId, price: 199.99, currency: 'RUB', category: 'programming' as CourseCategory, isPublished: true, studentsEnrolled: 50, isArchived: false },
+        { id: courseExclusiveId, title: 'Мой Эксклюзивный Курс', description: 'Курс от платформы.', instructorId: adminId, price: 150.00, currency: 'RUB', category: 'other' as CourseCategory, isPublished: true, studentsEnrolled: 5, isArchived: false },
+      ];
 
-      await client.query(
-        `INSERT INTO courses (id, title, description, instructor_id, price, currency, category, is_published, students_enrolled, is_archived) VALUES
-         ($1, 'Основы ИИ', 'Курс по основам искусственного интеллекта.', $4, 99.99, 'RUB', 'programming', TRUE, 10, FALSE),
-         ($2, 'Fullstack Web-разработка', 'Полный курс по веб-разработке.', $4, 199.99, 'RUB', 'programming', TRUE, 50, FALSE),
-         ($3, 'Мой Эксклюзивный Курс', 'Курс от платформы.', $5, 150.00, 'RUB', 'other', TRUE, 5, FALSE);`,
-        [courseAiId, courseWebDevId, courseExclusiveId, teacherId, adminId]
-      );
+      for (const courseData of coursesToInsert) {
+        await client.query(
+          `INSERT INTO courses (id, title, description, image_url, price, currency, instructor_id, category, is_published, students_enrolled, is_archived, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [
+            courseData.id,
+            courseData.title,
+            courseData.description,
+            // image_url может быть null, если не предоставлен в courseData
+            null, // Убедитесь, что это соответствует вашей схеме, или добавьте image_url в courseData
+            courseData.price,
+            courseData.currency,
+            courseData.instructorId,
+            courseData.category,
+            courseData.isPublished,
+            courseData.studentsEnrolled,
+            courseData.isArchived,
+          ]
+        );
+      }
       console.log('Test courses seeded.');
 
       // Связывание студента с курсами (пример покупки)
