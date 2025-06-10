@@ -35,7 +35,7 @@ export const authHelper = {
       user = await db.createUser({
         username: email.split('@')[0],
         email: email,
-        role: 'student', // ИСПРАВЛЕНО: Использование строкового литерала
+        role: 'student',
         emailVerified: false,
         platformAccessTier: 'free',
         studentSlotsAvailable: 0,
@@ -62,13 +62,18 @@ export const authHelper = {
 
     console.log('JWT: Generating token for payload:', tokenPayload);
 
-    const token = jwtHelper.generateToken(tokenPayload, MAGIC_LINK_SECRET);
+    // ИСПРАВЛЕНИЕ: ДОБАВЛЕН 'await' здесь!
+    const token = await jwtHelper.generateToken(tokenPayload, MAGIC_LINK_SECRET);
 
     // Сохраняем токен в БД
-    await db.createMagicLinkToken(user.id, await token, expiresAt);
+    await db.createMagicLinkToken(user.id, token, expiresAt);
+    console.log(`Auth: Magic link token (first 10 chars): ${token.substring(0, 10)}... saved to DB`);
+
 
     const appUrl = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
     const magicLinkUrl = `${appUrl}/auth/magic-link?token=${token}`;
+    console.log(`Auth: Generated magicLinkUrl: ${magicLinkUrl.substring(0, 50)}...`); // Логируем начало URL
+
 
     const mailOptions = {
       from: process.env.EMAIL_FROM_ADDRESS || 'no-reply@ns-tech.es',
@@ -109,24 +114,22 @@ export const authHelper = {
   },
 
   verifyMagicLink: async (token: string): Promise<TokenPayload | null> => {
-    console.log(`Auth: Attempting to verify magic link token: ${token.substring(0, 10)}...`);
+    console.log(`Auth: Attempting to verify magic link token: ${token.substring(0, 10)}... (full token length: ${token.length})`); // Добавлено логирование длины токена
     try {
-      // 1. Проверяем токен в БД (теперь более простой запрос)
       const storedToken = await db.getMagicLinkToken(token);
 
       if (!storedToken) {
         console.warn('Auth: Magic link token NOT FOUND in DB for verification. It might be expired or used, or never saved.');
         return null;
       }
-      console.log('Auth: Found stored token in DB:', { id: storedToken.id, userId: storedToken.userId, usedAt: storedToken.usedAt, expiresAt: storedToken.expiresAt, tokenSubstring: storedToken.token.substring(0,10) + '...' });
+      console.log('Auth: Found stored token in DB:', { id: storedToken.id, userId: storedToken.userId, usedAt: storedToken.usedAt, expiresAt: storedToken.expiresAt, storedTokenSubstring: storedToken.token.substring(0,10) + '...' });
 
 
-      // 2. Декодируем JWT из токена Magic Link, используя его специфический секрет
       const decodedMagicLinkPayload: TokenPayload & { type?: string; exp?: number } | null = await jwtHelper.verifyToken(token, MAGIC_LINK_SECRET);
 
       if (!decodedMagicLinkPayload) {
         console.warn('Auth: Invalid JWT payload in magic link token (decoding failed).');
-        await db.invalidateMagicLinkToken(storedToken.id); // Инвалидируем на всякий случай
+        await db.invalidateMagicLinkToken(storedToken.id);
         return null;
       }
       console.log('Auth: Decoded JWT payload:', decodedMagicLinkPayload);
@@ -143,7 +146,6 @@ export const authHelper = {
         return null;
       }
 
-      // Дополнительные проверки состояния токена после успешного декодирования
       if (storedToken.usedAt) {
         console.warn('Auth: Magic link token already USED (usedAt is set).');
         return null;
@@ -151,23 +153,20 @@ export const authHelper = {
 
       if (storedToken.expiresAt && new Date() > storedToken.expiresAt) {
         console.warn('Auth: Magic link token has EXPIRED (based on DB expiresAt).');
-        await db.invalidateMagicLinkToken(storedToken.id); // Инвалидируем
+        await db.invalidateMagicLinkToken(storedToken.id);
         return null;
       }
 
-      // JWT exp (expiration) - это Unix timestamp в секундах, поэтому умножаем на 1000 для миллисекунд
       if (decodedMagicLinkPayload.exp && decodedMagicLinkPayload.exp * 1000 < Date.now()) {
         console.warn('Auth: Magic link token has EXPIRED (based on JWT exp claim).');
-        await db.invalidateMagicLinkToken(storedToken.id); // Инвалидируем
+        await db.invalidateMagicLinkToken(storedToken.id);
         return null;
       }
 
 
-      // 3. Инвалидируем токен в БД после успешного использования и всех проверок
       await db.invalidateMagicLinkToken(storedToken.id);
       console.log(`Auth: Magic link token ${storedToken.id} successfully invalidated.`);
 
-      // 4. Получаем актуальные данные пользователя из БД
       const user = await db.getUserById(decodedMagicLinkPayload.userId);
       if (!user) {
         console.warn(`Auth: User ${decodedMagicLinkPayload.userId} not found in DB after magic link verification.`);
@@ -188,7 +187,6 @@ export const authHelper = {
 
     } catch (error) {
       console.error('Auth: Error verifying magic link token:', error);
-      // Дополнительная отладка ошибок JWT
       if (error instanceof Error && error.name === 'TokenExpiredError') {
         console.error('Auth: JWT verification failed: TokenExpiredError (token was expired)');
       } else if (error instanceof Error && error.name === 'JsonWebTokenError') {
